@@ -9,19 +9,90 @@ import JimpRaw from 'jimp'
 // Webpack makes a mess..
 const Jimp = JimpRaw.default || JimpRaw
 
-class GenericHttpInstance extends InstanceBase {
+class CastrAPIInstance extends InstanceBase {
+	
+	streams = new Map()
+	streamsByName = new Map()
+
 	configUpdated(config) {
 		this.config = config
 
+		this.initAPI()
 		this.initActions()
 		this.initFeedbacks()
+		this.log('debug', 'Config updated')
+	}
+
+	callAPI(method, endpoint, pathParams, bodyParams) {
+		const authorization = Buffer.from(this.config.accessToken + ':' + this.config.secretKey).toString('base64')
+		const url = this.config.apiUrl + endpoint
+		if (pathParams) {
+			url = url + '/' + pathParams
+		}
+		let options = {
+			method: method,
+			headers: {
+				accept: 'application/json',
+				'content-type': 'application/json',
+				authorization: `Basic ${authorization}`,
+			},
+		}
+		if (bodyParams) {
+			options.body = JSON.stringify(bodyParams)
+		}
+		this.log('debug', `Calling ${method} ${url} with options: ` + JSON.stringify(options))
+		return new Promise((resolve, reject) => {
+			fetch(url, options)
+				.then((res) => {
+					if (!res.ok) {
+						switch (res.status) {
+							case 401:
+								this.updateStatus(InstanceStatus.AuthenticationFailure, res.statusText)
+								this.log('error', `API Authorization failed: ${res.status} ${res.statusText}`)
+								break
+							default:
+								this.updateStatus(InstanceStatus.UnknownError, res.statusText)
+								this.log('error', `API Error: ${res.status} ${res.statusText}`)
+								break
+						}
+						reject(res.statusText)
+					} else {
+						this.log('debug', `API Response: ${res.status} ${res.statusText}`)
+					}
+					resolve(res.json())
+				})
+				.catch((err) => {
+					reject(err)
+				})
+		})
+	}
+
+	getStreams() {
+		this.callAPI('GET', 'live_streams', null, null)
+			.then((json) => {
+				this.log('debug', 'live_streams response: ' + JSON.stringify(json))
+				this.streams.clear()
+				this.streamsByName.clear()
+				for (const stream of json.docs) {
+					this.streams.set(stream._id, stream)
+					this.streamsByName.set(stream.name, stream)
+				}
+				//this.log('debug', 'Streams: ' + JSON.stringify(this.streams))
+				console.log(this.streamsByName)
+			})
+			.catch((err) => this.log('error', 'failed to read stream list'))
+	}
+
+	initAPI() {
+		this.getStreams()
 	}
 
 	init(config) {
 		this.config = config
 
-		this.updateStatus(InstanceStatus.Ok)
+		this.updateStatus(InstanceStatus.Unknown, 'Initializing')
 
+		this.initAPI()
 		this.initActions()
 		this.initFeedbacks()
 	}
@@ -324,4 +395,4 @@ class GenericHttpInstance extends InstanceBase {
 	}
 }
 
-runEntrypoint(GenericHttpInstance, upgradeScripts)
+runEntrypoint(CastrAPIInstance, upgradeScripts)

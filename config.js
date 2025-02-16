@@ -1,58 +1,66 @@
 export const configFields = [
 	{
 		type: 'static-text',
-		id: 'info',
+		id: 'apikeys',
 		width: 12,
-		label: 'Information',
-		value:
-			"<strong>PLEASE READ THIS!</strong> Generic modules is only for use with custom applications. If you use this module to control a device or software on the market that more than you are using, <strong>PLEASE let us know</strong> about this software, so we can make a proper module for it. If we already support this and you use this to trigger a feature our module doesnt support, please let us know. We want companion to be as easy as possible to use for anyone.<br /><br />Use the 'Base URL' field below to define a starting URL for the instance's commands: e.g. 'http://server.url/path/'.  <b>This field will be ignored if a command uses a full URL.</b>",
+		labela: 'castr.io API Keys',
+		value: `
+			<hr />
+			<h5>castr.io API Keys</h5>
+			<p>Please login into your castr.io account, and obtain an <b>Access Token</b>. This can be done in <b>Settings / API</b> by 
+			clicking &quot;Create API Token&quot button.</p>
+		`,
 	},
 	{
 		type: 'textinput',
-		id: 'prefix',
-		label: 'Base URL',
+		id: 'accessToken',
+		label: 'Access Token ID',
 		width: 12,
 		default: '',
 	},
 	{
 		type: 'textinput',
-		id: 'proxyAddress',
-		label: 'Proxy Address',
-		tooltip: 'E.g. http://username:password@proxy-server:8080',
+		id: 'secretKey',
+		label: 'Secret Key',
 		width: 12,
 		default: '',
 	},
 	{
 		type: 'static-text',
-		id: 'rejectUnauthorizedInfo',
+		id: 'miscsettings',
 		width: 12,
+		labela: 'Options',
 		value: `
-					<hr />
-					<h5>WARNING</h5>
-					This module rejects server certificates considered invalid for the following reasons:
-					<ul>
-						<li>Certificate is expired</li>
-						<li>Certificate has the wrong host</li>
-						<li>Untrusted root certificate</li>
-						<li>Certificate is self-signed</li>
-					</ul>
-					<p>
-						We DO NOT recommend turning off this option. However, if you NEED to connect to a host
-						with a self-signed certificate you will need to set <strong>Unauthorized Certificates</strong>
-						to <strong>Accept</strong>.
-					</p>
-					<p><strong>USE AT YOUR OWN RISK!<strong></p>
-				`,
+			<hr />
+			<h5>Options</h5>
+			<p>Leave these as default unless you know what you are doing.</p>
+		`,
 	},
 	{
-		type: 'dropdown',
-		id: 'rejectUnauthorized',
-		label: 'Unauthorized Certificates',
-		width: 6,
-		default: true,
-		choices: [
-			{ id: true, label: 'Reject' },
-			{ id: false, label: 'Accept - Use at your own risk!' },
-		],
+		type: 'number',
+		id: 'pollInterval',
+		label: 'Polling Interval',
+		tooltip: 'how often to poll the API for new data, in seconds. 0=never',
+		width: 12,
+		default: 60,
+		min: 0,
+		max: 3600,
+	},
+	{
+		type: 'textinput',
+		id: 'apiUrl',
+		label: 'Base API URL',
+		width: 12,
+		default: 'https://api.castr.com/v2/',
+		tooltip: 'Leave blank to use the default API URL',
+	},
+	{
+		type: 'static-text',
+		id: 'hbar',
+		width: 12,
+		labela: 'Options',
+		value: `
+			<hr />
+		`,
 	},
 ]
