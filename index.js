@@ -9,12 +9,6 @@ import JimpRaw from 'jimp'
 // Webpack makes a mess..
 const Jimp = JimpRaw.default || JimpRaw
 
-const OnOffToggle = {
-	ON: 'on',
-	OFF: 'off',
-	TOGGLE: 'toggle',
-}
-
 class CastrAPIInstance extends InstanceBase {
 	
 	streams = new Map()
@@ -83,10 +77,8 @@ class CastrAPIInstance extends InstanceBase {
 					this.streams.set(stream._id, stream)
 					this.streamsByName.set(stream.name, stream)
 				}
-				this.log('debug', 'Streams found: ' + Array.from(this.streamsByName.keys()).join(', '))
-				this.initActions()
-				this.updateStatus(InstanceStatus.Ok)
-				
+				this.log('debug', 'Streams: ' + this.streams.keys()
+				//console.log(this.streamsByName)
 			})
 			.catch((err) => this.log('error', 'failed to read stream list'))
 	}
@@ -99,6 +91,7 @@ class CastrAPIInstance extends InstanceBase {
 		this.config = config
 
 		this.updateStatus(InstanceStatus.Unknown, 'Initializing')
+
 		this.initAPI()
 		this.initActions()
 		this.initFeedbacks()
@@ -192,52 +185,7 @@ class CastrAPIInstance extends InstanceBase {
 		}
 	}
 
-	async actionEnableStream(action, context) {
-		console.log('Enable Stream')
-		console.log(action)
-		console.log(context)
-	}
-
 	initActions() {
-		this.log('debug', 'Initializing actions')
-
-		let streamField = {
-			type: 'dropdown',
-			label: 'Stream',
-			allowCustom: true,
-			id: 'stream',
-			choices: 
-				Array.from(this.streams.keys())
-				.map((k) => {return { id: this.streams.get(k).name, label: this.streams.get(k).name } })
-				.concat(
-					Array.from(this.streams.keys())
-					.map((k) => {return { id: k, label: k } })
-				),
-			tooltip: 'use either the stream name or the stream id',
-		}
-
-		let onOffToggleField = {
-			type: 'dropdown',
-			label: 'On / Off / Toggle',
-			id: 'onoff',
-			choices: Object.keys(OnOffToggle).map((k) => {return { id: OnOffToggle[k], label: OnOffToggle[k] } }),
-		}
-
-		this.setActionDefinitions({
-			enableStream: {
-				name: 'Enable Stream',
-				label: 'Enable Stream',
-				options: [
-					streamField,
-					onOffToggleField
-				],
-				callback: this.actionEnableStream,
-			}
-		})
-	}
-
-	initActionsOld() {
-
 		const urlLabel = this.config.prefix ? 'URI' : 'URL'
 
 		this.setActionDefinitions({

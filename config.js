@@ -42,7 +42,7 @@ export const configFields = [
 		label: 'Polling Interval',
 		tooltip: 'how often to poll the API for new data, in seconds. 0=never',
 		width: 12,
-		default: 60,
+		default: 10,
 		min: 0,
 		max: 3600,
 	},
