@@ -9,6 +9,12 @@ import JimpRaw from 'jimp'
 // Webpack makes a mess..
 const Jimp = JimpRaw.default || JimpRaw
 
+const OnOffToggle = {
+	ON: 'on',
+	OFF: 'off',
+	TOGGLE: 'toggle',
+}
+
 class CastrAPIInstance extends InstanceBase {
 	
 	streams = new Map()
@@ -25,7 +31,7 @@ class CastrAPIInstance extends InstanceBase {
 
 	callAPI(method, endpoint, pathParams, bodyParams) {
 		const authorization = Buffer.from(this.config.accessToken + ':' + this.config.secretKey).toString('base64')
-		const url = this.config.apiUrl + endpoint
+		let url = this.config.apiUrl + endpoint
 		if (pathParams) {
 			url = url + '/' + pathParams
 		}
@@ -67,31 +73,32 @@ class CastrAPIInstance extends InstanceBase {
 		})
 	}
 
-	getStreams() {
+	pollAPI() {
 		this.callAPI('GET', 'live_streams', null, null)
 			.then((json) => {
-				this.log('debug', 'live_streams response: ' + JSON.stringify(json))
+				this.log('debug', 'pollAPI() live_streams response: ' + JSON.stringify(json,null,2))
 				this.streams.clear()
 				this.streamsByName.clear()
 				for (const stream of json.docs) {
 					this.streams.set(stream._id, stream)
 					this.streamsByName.set(stream.name, stream)
 				}
-				this.log('debug', 'Streams: ' + this.streams.keys())
-				//console.log(this.streamsByName)
+				this.log('debug', 'Streams found: ' + Array.from(this.streamsByName.keys()).join(', '))
+				this.initActions()
+				this.updateStatus(InstanceStatus.Ok)
+				
 			})
 			.catch((err) => this.log('error', 'failed to read stream list'))
 	}
 
 	initAPI() {
-		this.getStreams()
+		this.pollAPI()
 	}
 
 	init(config) {
 		this.config = config
 
 		this.updateStatus(InstanceStatus.Unknown, 'Initializing')
-
 		this.initAPI()
 		this.initActions()
 		this.initFeedbacks()
@@ -185,7 +192,99 @@ class CastrAPIInstance extends InstanceBase {
 		}
 	}
 
+	/**
+	 * Resolves the "stream" and "target" parameters, expanding the variables and trying to translate
+	 * from stream name to stream id and from target name to target id.
+	 * 
+	 * @param {import('@companion-module/base').CompanionActionEvent} action
+	 * @param {import('@companion-module/base/dist/module-api/common.js').CompanionCommonCallbackContext} context
+	 */
+	async resolveActionOptions(action,context) {
+		if (action.options.stream) {
+			action.options.stream = await context.parseVariablesInString(action.options.stream);
+			if (this.streams.has(action.options.stream)) {
+			} else
+			if (this.streamsByName.has(action.options.stream)) {
+				action.options.stream = this.streamsByName.get(action.options.stream)._id
+			}
+			else {
+				this.log('warn', `Stream name '${action.options.stream}' not found, passing as-is to API`)
+			}
+		}
+		this.log('debug',"resolveActionOptions() - resolved action: "+JSON.stringify(action,null,2))
+	}
+
+	/**
+	 * Enables or disables a stream
+	 * 
+	 * @param {import('@companion-module/base').CompanionActionEvent} action
+	 * @param {import('@companion-module/base/dist/module-api/common.js').CompanionCommonCallbackContext} context
+	 */
+	async actionEnableStream(action, context) {
+		this.log('debug',"actionEnableStream() - action: "+JSON.stringify(action,null,2))
+		await this.resolveActionOptions(action, context)
+		let enabled = false;
+		switch (action.options.onoff) {
+			case OnOffToggle.ON: enabled = true; break;
+			case OnOffToggle.OFF: enabled = false; break;
+			case OnOffToggle.TOGGLE: 
+				if (this.streams.has(action.options.stream)) {
+					enabled = !this.streams.get(action.options.stream).enabled
+				}
+				else {
+					this.log('error', `actionEnableStream(): Stream '${action.options.stream}' not found, cannot toggle`)
+				}
+				break;
+		}
+		this.callAPI('PATCH', 'live_streams', action.options.stream, { enabled: enabled })
+			.then((json) => {
+				this.log('debug', 'live_streams PATCH response: ' + JSON.stringify(json, null, 2))	
+				//this.getStreams()
+			})
+			.catch((err) => this.log('error', 'failed to enable stream'))
+	}
+
 	initActions() {
+		this.log('debug', 'Initializing actions')
+
+		let streamField = {
+			type: 'dropdown',
+			label: 'Stream',
+			allowCustom: true,
+			id: 'stream',
+			useVariables: true,
+			choices: 
+				Array.from(this.streams.keys())
+				.map((k) => {return { id: this.streams.get(k).name, label: this.streams.get(k).name } })
+				.concat(
+					Array.from(this.streams.keys())
+					.map((k) => {return { id: k, label: k } })
+				),
+			tooltip: 'use either the stream name or the stream id, variables are expanded',
+		}
+
+		let onOffToggleField = {
+			type: 'dropdown',
+			label: 'On / Off / Toggle',
+			id: 'onoff',
+			choices: Object.keys(OnOffToggle).map((k) => {return { id: OnOffToggle[k], label: OnOffToggle[k] } }),
+		}
+
+		this.setActionDefinitions({
+			enableStream: {
+				name: 'Enable Stream',
+				label: 'Enable Stream',
+				options: [
+					streamField,
+					onOffToggleField
+				],
+				callback: (action,context) => this.actionEnableStream(action,context),
+			}
+		})
+	}
+
+	initActionsOld() {
+
 		const urlLabel = this.config.prefix ? 'URI' : 'URL'
 
 		this.setActionDefinitions({
