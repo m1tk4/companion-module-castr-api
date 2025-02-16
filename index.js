@@ -97,14 +97,14 @@ class GenericHttpInstance extends InstanceBase {
 			}
 		}
 
-		if(this.config.proxyAddress && this.config.proxyAddress.length > 0) {
+		if (this.config.proxyAddress && this.config.proxyAddress.length > 0) {
 			options.agent = {
 				http: new HttpProxyAgent({
-					proxy: this.config.proxyAddress
+					proxy: this.config.proxyAddress,
 				}),
 				https: new HttpsProxyAgent({
-					proxy: this.config.proxyAddress
-				})
+					proxy: this.config.proxyAddress,
+				}),
 			}
 		}
 
@@ -120,11 +120,12 @@ class GenericHttpInstance extends InstanceBase {
 		this.setActionDefinitions({
 			post: {
 				name: 'POST',
-				options: [FIELDS.Url(urlLabel),
-					  FIELDS.Body,
-					  FIELDS.Header,
-					  FIELDS.ContentType,
-					 {
+				options: [
+					FIELDS.Url(urlLabel),
+					FIELDS.Body,
+					FIELDS.Header,
+					FIELDS.ContentType,
+					{
 						type: 'custom-variable',
 						label: 'JSON Response Data Variable',
 						id: 'jsonResultDataVariable',
@@ -134,7 +135,7 @@ class GenericHttpInstance extends InstanceBase {
 						label: 'JSON Stringify Result',
 						id: 'result_stringify',
 						default: true,
-					}
+					},
 				],
 				callback: async (action, context) => {
 					const { url, options } = await this.prepareQuery(context, action, true)
@@ -159,7 +160,7 @@ class GenericHttpInstance extends InstanceBase {
 
 							this.setCustomVariableValue(jsonResultDataVariable, resultData)
 						}
-						
+
 						this.updateStatus(InstanceStatus.Ok)
 					} catch (e) {
 						this.log('error', `HTTP POST Request failed (${e.message})`)

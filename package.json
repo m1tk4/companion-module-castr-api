@@ -4,7 +4,8 @@
 	"main": "index.js",
 	"type": "module",
 	"scripts": {
-		"test": "echo \"Error: no test specified\" && exit 1"
+		"format": "prettier -w .",
+		"package": "companion-module-build"
 	},
 	"repository": {
 		"type": "git",
@@ -12,7 +13,7 @@
 	},
 	"license": "MIT",
 	"dependencies": {
-		"@companion-module/base": "~1.10.0",
+		"@companion-module/base": "~1.11.2",
 		"got": "^13.0.0",
 		"hpagent": "^1.2.0",
 		"jimp": "^0.22.12"
@@ -20,5 +21,6 @@
 	"devDependencies": {
 		"@companion-module/tools": "^1.5.1"
 	},
-	"packageManager": "yarn@4.4.1"
+	"prettier": "@companion-module/tools/.prettierrc.json",
+	"packageManager": "yarn@4.5.3"
 }

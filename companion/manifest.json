@@ -21,11 +21,6 @@
 		"entrypoint": "../index.js"
 	},
 	"manufacturer": "castr.io",
-	"products": [
-		"API v2"
-	],
-	"keywords": [
-		"castr.io",
-		"restreaming"
-	]
+	"products": ["API v2"],
+	"keywords": ["castr.io", "restreaming"]
 }
