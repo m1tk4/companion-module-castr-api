@@ -77,8 +77,7 @@ class CastrAPIInstance extends InstanceBase {
 					this.streams.set(stream._id, stream)
 					this.streamsByName.set(stream.name, stream)
 				}
-				//this.log('debug', 'Streams: ' + JSON.stringify(this.streams))
-				console.log(this.streamsByName)
+				this.log('debug', 'Streams found: ' + Array.from(this.streamsByName.keys()).join(', '))
 			})
 			.catch((err) => this.log('error', 'failed to read stream list'))
 	}
