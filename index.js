@@ -26,7 +26,6 @@ class CastrAPIInstance extends InstanceBase {
 
     configUpdated(config) {
         this.config = config
-
         this.initAPI()
         this.initActions()
         this.initFeedbacks()
@@ -42,7 +41,6 @@ class CastrAPIInstance extends InstanceBase {
      * @param {Object} bodyParams 
      * @returns {Promise}
      */
-
     callAPI(method, endpoint, pathParams, bodyParams) {
         const authorization = Buffer.from(this.config.accessToken + ':' + this.config.secretKey).toString('base64')
         let url = this.config.apiUrl + endpoint
@@ -156,11 +154,7 @@ class CastrAPIInstance extends InstanceBase {
     }
 
     pollTimer = null;
-
-    initAPI() {
-
-        this.pollAPI()
-
+    startPollTimer() {
         // start polling timer
         if (this.pollTimer) {
             clearInterval(this.pollTimer)
@@ -171,6 +165,11 @@ class CastrAPIInstance extends InstanceBase {
                 this.pollAPI()
             }, this.config.pollInterval * 1000)
         }
+    }
+
+    initAPI() {
+        this.pollAPI()
+        this.startPollTimer()
     }
 
     init(config) {
@@ -234,7 +233,7 @@ class CastrAPIInstance extends InstanceBase {
                 if (typeof stream.platforms === 'object' && Array.isArray(stream.platforms)) {
                     for (const platform of stream.platforms) {
                         if (platform.name === platformName || platformName === '*ALL*') {
-                            action.options.platforms.push({id: platform._id, enabled: platform.enabled})
+                            action.options.platforms.push({ id: platform._id, enabled: platform.enabled })
                         }
                     }
                 }
@@ -286,29 +285,21 @@ class CastrAPIInstance extends InstanceBase {
         this.log('debug', "actionEnablePlatform() - action: " + JSON.stringify(action, null, 2))
         await this.resolveActionOptions(action, context)
 
-        return
-
-        let enabled = false;
-        switch (action.options.onoff) {
-            case OnOffToggle.ON: enabled = true; break;
-            case OnOffToggle.OFF: enabled = false; break;
-            case OnOffToggle.TOGGLE:
-                if (this.streams.has(action.options.stream)) {
-                    enabled = !this.streams.get(action.options.stream).enabled
-                }
-                else {
-                    this.log('error', `actionEnableStream(): Stream '${action.options.stream}' not found, cannot toggle`)
-                }
-                break;
+        for (const platform of action.options.platforms) {
+            let enabled = false;
+            switch (action.options.onoff) {
+                case OnOffToggle.ON: enabled = true; break;
+                case OnOffToggle.OFF: enabled = false; break;
+                case OnOffToggle.TOGGLE: enabled = !platform.enabled; break;
+            }
+            this.callAPI('PATCH', 'live_streams', `${action.options.stream}/platforms/${platform.id}`, { enabled: enabled })
+                .then((json) => {
+                    this.log('debug', 'platforms PATCH response: ' + JSON.stringify(json, null, 2))
+                    this.pollAPI()
+                })
+                .catch((err) => this.log('error', 'failed to enable platform: ' + err))
         }
-        this.callAPI('PATCH', 'live_streams', action.options.stream, { enabled: enabled })
-            .then((json) => {
-                this.log('debug', 'live_streams PATCH response: ' + JSON.stringify(json, null, 2))
-                //this.getStreams()
-            })
-            .catch((err) => this.log('error', 'failed to enable stream'))
     }
-
 
     initActions() {
         this.log('debug', 'Initializing actions')
