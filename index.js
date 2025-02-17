@@ -16,10 +16,10 @@ const OnOffToggle = {
 }
 
 class CastrAPIInstance extends InstanceBase {
-    
+
     streams = new Map()
     streamsByName = new Map()
-	variableDefinitionsCache = null
+    variableDefinitionsCache = null
 
     configUpdated(config) {
         this.config = config
@@ -30,15 +30,15 @@ class CastrAPIInstance extends InstanceBase {
         this.log('debug', 'Config updated')
     }
 
-	/**
-	 * Returns promise of an API call, taking care of authorization and error handling
-	 * 
-	 * @param {String} method 
-	 * @param {String} endpoint 
-	 * @param {String} pathParams 
-	 * @param {Object} bodyParams 
-	 * @returns {Promise}
-	 */
+    /**
+     * Returns promise of an API call, taking care of authorization and error handling
+     * 
+     * @param {String} method 
+     * @param {String} endpoint 
+     * @param {String} pathParams 
+     * @param {Object} bodyParams 
+     * @returns {Promise}
+     */
 
     callAPI(method, endpoint, pathParams, bodyParams) {
         const authorization = Buffer.from(this.config.accessToken + ':' + this.config.secretKey).toString('base64')
@@ -84,78 +84,83 @@ class CastrAPIInstance extends InstanceBase {
         })
     }
 
-	/**
-	 * Polls the API for the list of live streams, updates all variables, actions and feedbacks
-	 */
+    /**
+     * Polls the API for the list of live streams, updates all variables, actions and feedbacks
+     */
     pollAPI() {
         this.callAPI('GET', 'live_streams', null, null)
             .then((json) => {
-                this.log('debug', 'pollAPI() live_streams response: ' + JSON.stringify(json,null,2))
+                this.log('debug', 'pollAPI() live_streams response: ' + JSON.stringify(json, null, 2))
 
-				this.streams.clear()
+                this.streams.clear()
                 this.streamsByName.clear()
-				let variableDefinitions = []
-				let variableValues = {}
+                let variableDefinitions = []
+                let variableValues = {}
 
-				function addVar(id, name, value) {
-					id = id.replace(/[^a-zA-Z0-9_-]/g, '_'); // sanitize the id
-					variableDefinitions.push({ variableId: id, name: name});
-					variableValues[id] = value;
-				}
+                function addVar(id, name, value) {
+                    id = id.replace(/[^a-zA-Z0-9_-]/g, '_'); // sanitize the id
+                    variableDefinitions.push({ variableId: id, name: name });
+                    variableValues[id] = value;
+                }
 
                 for (const stream of json.docs) {
                     this.streams.set(stream._id, stream)
                     this.streamsByName.set(stream.name, stream)
-					addVar(`stream_${stream._id}_name`, `Stream '${stream._id}' Name`, stream.name)
-					addVar(`stream_${stream._id}_enabled`, `Stream '${stream._id}' Enabled`, stream.enabled || false )
-                    addVar(`stream_${stream._id}_status`, `Stream '${stream._id}' Status`, stream.broadcasting_status || 'undefined')
-					addVar(`stream_${stream._id}_ingest_server`, `Stream '${stream._id}' ingest server`, stream.ingest.server || '')
-					addVar(`stream_${stream._id}_ingest_key`, `Stream '${stream._id}' ingest key`, stream.ingest.key || '')
-					addVar(`stream_${stream.name}_id`, `Stream '${stream.name}' ID`, stream._id)
-					addVar(`stream_${stream.name}_enabled`, `Stream '${stream.name}' Enabled`, stream.enabled || false )
-                    addVar(`stream_${stream.name}_status`, `Stream '${stream.name}' Status`, stream.broadcasting_status || 'undefined')
-					addVar(`stream_${stream.name}_ingest_server`, `Stream '${stream.name}' ingest server`, stream.ingest.server || '')
-					addVar(`stream_${stream.name}_ingest_key`, `Stream '${stream.name}' ingest key`, stream.ingest.key || '')
-					if (typeof stream.platforms === 'object' && Array.isArray(stream.platforms)) {
-						for (const platform of stream.platforms) {
-							addVar(`stream_${stream.name}_platform_${platform.name}_status`, `Stream '${stream.name}', platform '${platform.name}' status`, platform.broadcasting_status || 'undefined')
-							addVar(`stream_${stream.name}_platform_${platform.name}_enabled`, `Stream '${stream.name}', platform '${platform.name}' enabled`, platform.enabled || false)
-						}
-					}
+                    try {
+                        addVar(`stream_${stream._id}_name`, `Stream '${stream._id}' Name`, stream.name)
+                        addVar(`stream_${stream._id}_enabled`, `Stream '${stream._id}' Enabled`, stream.enabled || false)
+                        addVar(`stream_${stream._id}_status`, `Stream '${stream._id}' Status`, stream.broadcasting_status || 'undefined')
+                        addVar(`stream_${stream._id}_ingest_server`, `Stream '${stream._id}' ingest server`, stream.ingest.server || '')
+                        addVar(`stream_${stream._id}_ingest_key`, `Stream '${stream._id}' ingest key`, stream.ingest.key || '')
+                        addVar(`stream_${stream.name}_id`, `Stream '${stream.name}' ID`, stream._id)
+                        addVar(`stream_${stream.name}_enabled`, `Stream '${stream.name}' Enabled`, stream.enabled || false)
+                        addVar(`stream_${stream.name}_status`, `Stream '${stream.name}' Status`, stream.broadcasting_status || 'undefined')
+                        addVar(`stream_${stream.name}_ingest_server`, `Stream '${stream.name}' ingest server`, stream.ingest.server || '')
+                        addVar(`stream_${stream.name}_ingest_key`, `Stream '${stream.name}' ingest key`, stream.ingest.key || '')
+                        if (typeof stream.platforms === 'object' && Array.isArray(stream.platforms)) {
+                            for (const platform of stream.platforms) {
+                                addVar(`stream_${stream.name}_platform_${platform.name}_status`, `Stream '${stream.name}', platform '${platform.name}' status`, platform.broadcasting_status || 'undefined')
+                                addVar(`stream_${stream.name}_platform_${platform.name}_enabled`, `Stream '${stream.name}', platform '${platform.name}' enabled`, platform.enabled || false)
+                            }
+                        }
+                    }
+                    catch (err) {
+                        this.log('error', `failed to parse stream data: ${err}`)
+                    }
                 }
 
                 this.initActions()
 
-				// Update variable definitions (skip if cahced definitions are the same) and values
-				if (JSON.stringify(variableDefinitions) !== JSON.stringify(this.variableDefinitionsCache)) {
-					this.setVariableDefinitions(variableDefinitions)
-					this.variableDefinitionsCache = variableDefinitions
-					this.log('debug', 'variable definitions updated')
-				}
-				this.setVariableValues(variableValues)
+                // Update variable definitions (skip if cahced definitions are the same) and values
+                if (JSON.stringify(variableDefinitions) !== JSON.stringify(this.variableDefinitionsCache)) {
+                    this.setVariableDefinitions(variableDefinitions)
+                    this.variableDefinitionsCache = variableDefinitions
+                    this.log('debug', 'variable definitions updated')
+                }
+                this.setVariableValues(variableValues)
 
                 this.updateStatus(InstanceStatus.Ok)
-                
+
             })
             .catch((err) => this.log('error', 'failed to read stream list'))
     }
 
-	pollTimer = null;
+    pollTimer = null;
 
     initAPI() {
-			
+
         this.pollAPI()
 
-		// start polling timer
-		if (this.pollTimer) {
-			clearInterval(this.pollTimer)
-		}
-		if (this.config.pollInterval > 0) {
-			this.pollTimer = setInterval(() => {
-				this.log('debug', 'polling timer fired')
-				this.pollAPI()
-			}, this.config.pollInterval * 1000)
-		}
+        // start polling timer
+        if (this.pollTimer) {
+            clearInterval(this.pollTimer)
+        }
+        if (this.config.pollInterval > 0) {
+            this.pollTimer = setInterval(() => {
+                this.log('debug', 'polling timer fired')
+                this.pollAPI()
+            }, this.config.pollInterval * 1000)
+        }
     }
 
     init(config) {
@@ -174,12 +179,12 @@ class CastrAPIInstance extends InstanceBase {
 
     // When module gets deleted
     async destroy() {
-        
-		if (this.pollTimer) {
-			clearInterval(this.pollTimer)
-		}
-		
-		// Stop any running feedback timers
+
+        if (this.pollTimer) {
+            clearInterval(this.pollTimer)
+        }
+
+        // Stop any running feedback timers
         for (const timer of Object.values(this.feedbackTimers)) {
             clearInterval(timer)
         }
@@ -192,19 +197,19 @@ class CastrAPIInstance extends InstanceBase {
      * @param {import('@companion-module/base').CompanionActionEvent} action
      * @param {import('@companion-module/base/dist/module-api/common.js').CompanionCommonCallbackContext} context
      */
-    async resolveActionOptions(action,context) {
+    async resolveActionOptions(action, context) {
         if (action.options.stream) {
             action.options.stream = await context.parseVariablesInString(action.options.stream);
             if (this.streams.has(action.options.stream)) {
             } else
-            if (this.streamsByName.has(action.options.stream)) {
-                action.options.stream = this.streamsByName.get(action.options.stream)._id
-            }
-            else {
-                this.log('warn', `Stream name '${action.options.stream}' not found, passing as-is to API`)
-            }
+                if (this.streamsByName.has(action.options.stream)) {
+                    action.options.stream = this.streamsByName.get(action.options.stream)._id
+                }
+                else {
+                    this.log('warn', `Stream name '${action.options.stream}' not found, passing as-is to API`)
+                }
         }
-        this.log('debug',"resolveActionOptions() - resolved action: "+JSON.stringify(action,null,2))
+        this.log('debug', "resolveActionOptions() - resolved action: " + JSON.stringify(action, null, 2))
     }
 
     /**
@@ -214,13 +219,13 @@ class CastrAPIInstance extends InstanceBase {
      * @param {import('@companion-module/base/dist/module-api/common.js').CompanionCommonCallbackContext} context
      */
     async actionEnableStream(action, context) {
-        this.log('debug',"actionEnableStream() - action: "+JSON.stringify(action,null,2))
+        this.log('debug', "actionEnableStream() - action: " + JSON.stringify(action, null, 2))
         await this.resolveActionOptions(action, context)
         let enabled = false;
         switch (action.options.onoff) {
             case OnOffToggle.ON: enabled = true; break;
             case OnOffToggle.OFF: enabled = false; break;
-            case OnOffToggle.TOGGLE: 
+            case OnOffToggle.TOGGLE:
                 if (this.streams.has(action.options.stream)) {
                     enabled = !this.streams.get(action.options.stream).enabled
                 }
@@ -231,7 +236,7 @@ class CastrAPIInstance extends InstanceBase {
         }
         this.callAPI('PATCH', 'live_streams', action.options.stream, { enabled: enabled })
             .then((json) => {
-                this.log('debug', 'live_streams PATCH response: ' + JSON.stringify(json, null, 2))    
+                this.log('debug', 'live_streams PATCH response: ' + JSON.stringify(json, null, 2))
                 //this.getStreams()
             })
             .catch((err) => this.log('error', 'failed to enable stream'))
@@ -246,21 +251,38 @@ class CastrAPIInstance extends InstanceBase {
             allowCustom: true,
             id: 'stream',
             useVariables: true,
-            choices: 
+            choices:
                 Array.from(this.streams.keys())
-                .map((k) => {return { id: this.streams.get(k).name, label: this.streams.get(k).name } })
-                .concat(
-                    Array.from(this.streams.keys())
-                    .map((k) => {return { id: k, label: k } })
-                ),
+                    .map((k) => { return { id: this.streams.get(k).name, label: this.streams.get(k).name } })
+                    .concat(
+                        Array.from(this.streams.keys())
+                            .map((k) => { return { id: k, label: k } })
+                    ),
             tooltip: 'use either the stream name or the stream id, variables are expanded',
         }
+
+        let platformField = {
+            type: 'dropdown',
+            label: 'Platform',
+            allowCustom: true,
+            id: 'stream',
+            useVariables: true,
+            choices:
+                Array.from(this.streams.keys())
+                    .map((k) => { return { id: this.streams.get(k).name, label: this.streams.get(k).name } })
+                    .concat(
+                        Array.from(this.streams.keys())
+                            .map((k) => { return { id: k, label: k } })
+                    ),
+            tooltip: 'use either the stream name or the stream id, variables are expanded',
+        }
+
 
         let onOffToggleField = {
             type: 'dropdown',
             label: 'On / Off / Toggle',
             id: 'onoff',
-            choices: Object.keys(OnOffToggle).map((k) => {return { id: OnOffToggle[k], label: OnOffToggle[k] } }),
+            choices: Object.keys(OnOffToggle).map((k) => { return { id: OnOffToggle[k], label: OnOffToggle[k] } }),
         }
 
         this.setActionDefinitions({
@@ -271,8 +293,18 @@ class CastrAPIInstance extends InstanceBase {
                     streamField,
                     onOffToggleField
                 ],
-                callback: (action,context) => this.actionEnableStream(action,context),
-            }
+                callback: (action, context) => this.actionEnableStream(action, context),
+            },
+            enablePlatform: {
+                name: 'Enable Platform',
+                label: 'Enable Platform',
+                options: [
+                    streamField,
+                    platformField,
+                    onOffToggleField
+                ],
+                callback: (action, context) => this.actionEnableStream(action, context),
+            },
         })
     }
 
