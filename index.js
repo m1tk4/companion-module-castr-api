@@ -223,7 +223,7 @@ class CastrAPIInstance extends InstanceBase {
         }
 
         // resolve platform field and build platforms list
-        if (typeof (action.options.platform !== 'undefined')) {
+        if (typeof (action.options.platform) !== 'undefined') {
             action.options.platform = await context.parseVariablesInString(action.options.platform)
             let [streamName, platformName] = action.options.platform.split(' :: ')
             console.log(`'${streamName}', '${platformName}'`)
@@ -234,12 +234,12 @@ class CastrAPIInstance extends InstanceBase {
                 if (typeof stream.platforms === 'object' && Array.isArray(stream.platforms)) {
                     for (const platform of stream.platforms) {
                         if (platform.name === platformName || platformName === '*ALL*') {
-                            action.options.platforms.push(platform._id)
+                            action.options.platforms.push({id: platform._id, enabled: platform.enabled})
                         }
                     }
                 }
             } else {
-                this.log('error', `resolveActionOptions() - stream '${streamName}' not found`)
+                this.log('error', `resolveActionOptions() - platform '${streamName}' not found`)
                 return
             }
         }
@@ -271,9 +271,9 @@ class CastrAPIInstance extends InstanceBase {
         this.callAPI('PATCH', 'live_streams', action.options.stream, { enabled: enabled })
             .then((json) => {
                 this.log('debug', 'live_streams PATCH response: ' + JSON.stringify(json, null, 2))
-                //this.getStreams()
+                this.pollAPI()
             })
-            .catch((err) => this.log('error', 'failed to enable stream'))
+            .catch((err) => this.log('error', 'failed to enable stream: ' + err))
     }
 
     /**
