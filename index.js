@@ -10,8 +10,8 @@ import JimpRaw from 'jimp'
 const Jimp = JimpRaw.default || JimpRaw
 
 const OnOffToggle = {
-    ON: 'on',
-    OFF: 'off',
+    ON: 'enable',
+    OFF: 'disable',
     TOGGLE: 'toggle',
 }
 
@@ -342,9 +342,10 @@ class CastrAPIInstance extends InstanceBase {
 
         let onOffToggleField = {
             type: 'dropdown',
-            label: 'On / Off / Toggle',
+            label: 'Action',
             id: 'onoff',
             choices: Object.keys(OnOffToggle).map((k) => { return { id: OnOffToggle[k], label: OnOffToggle[k] } }),
+            tooltip: 'select if you want to enable, disable or toggle',
         }
 
         let newActions = {
