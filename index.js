@@ -29,6 +29,16 @@ class CastrAPIInstance extends InstanceBase {
         this.log('debug', 'Config updated')
     }
 
+	/**
+	 * Returns promise of an API call, taking care of authorization and error handling
+	 * 
+	 * @param {String} method 
+	 * @param {String} endpoint 
+	 * @param {String} pathParams 
+	 * @param {Object} bodyParams 
+	 * @returns {Promise}
+	 */
+
     callAPI(method, endpoint, pathParams, bodyParams) {
         const authorization = Buffer.from(this.config.accessToken + ':' + this.config.secretKey).toString('base64')
         let url = this.config.apiUrl + endpoint
@@ -73,26 +83,66 @@ class CastrAPIInstance extends InstanceBase {
         })
     }
 
+	/**
+	 * Polls the API for the list of live streams, updates all variables, actions and feedbacks
+	 */
     pollAPI() {
         this.callAPI('GET', 'live_streams', null, null)
             .then((json) => {
                 this.log('debug', 'pollAPI() live_streams response: ' + JSON.stringify(json,null,2))
-                this.streams.clear()
+
+				this.streams.clear()
                 this.streamsByName.clear()
+				let variableDefinitions = []
+				let variableValues = {}
+
+				function addVar(id, name, value) {
+					id = id.replace(/[^a-zA-Z0-9_-]/g, '_'); // sanitize the id
+					variableDefinitions.push({ variableId: id, name: name});
+					variableValues[id] = value;
+				}
+
                 for (const stream of json.docs) {
                     this.streams.set(stream._id, stream)
                     this.streamsByName.set(stream.name, stream)
+					addVar(`stream_${stream._id}_name`, `Stream ${stream._id} Name`, stream.name)
+					addVar(`stream_${stream._id}_enabled`, `Stream ${stream._id} Enabled`, stream.enabled || false )
+                    addVar(`stream_${stream._id}_status`, `Stream ${stream._id} Status`, stream.broadcasting_status || 'undefined')
+					addVar(`stream_${stream._id}_ingest_server`, `Stream ${stream._id} ingest server`, stream.ingest.server || '')
+					addVar(`stream_${stream._id}_ingest_key`, `Stream ${stream._id} ingest key`, stream.ingest.key || '')
+					addVar(`stream_${stream.name}_id`, `Stream ${stream.name} ID`, stream._id)
+					addVar(`stream_${stream.name}_enabled`, `Stream ${stream.name} Enabled`, stream.enabled || false )
+                    addVar(`stream_${stream.name}_status`, `Stream ${stream.name} Status`, stream.broadcasting_status || 'undefined')
+					addVar(`stream_${stream.name}_ingest_server`, `Stream ${stream.name} ingest server`, stream.ingest.server || '')
+					addVar(`stream_${stream.name}_ingest_key`, `Stream ${stream.name} ingest key`, stream.ingest.key || '')
                 }
-                this.log('debug', 'Streams found: ' + Array.from(this.streamsByName.keys()).join(', '))
+
                 this.initActions()
+				console.log('variableDefinitions', variableDefinitions)
+				this.setVariableDefinitions(variableDefinitions)
+				this.setVariableValues(variableValues)
                 this.updateStatus(InstanceStatus.Ok)
                 
             })
             .catch((err) => this.log('error', 'failed to read stream list'))
     }
 
+	pollTimer = null;
+
     initAPI() {
+			
         this.pollAPI()
+
+		// start polling timer
+		if (this.pollTimer) {
+			clearInterval(this.pollTimer)
+		}
+		if (this.config.pollInterval > 0) {
+			this.pollTimer = setInterval(() => {
+				this.log('debug', 'polling timer fired')
+				this.pollAPI()
+			}, this.config.pollInterval * 1000)
+		}
     }
 
     init(config) {
@@ -111,90 +161,20 @@ class CastrAPIInstance extends InstanceBase {
 
     // When module gets deleted
     async destroy() {
-        // Stop any running feedback timers
+        
+		if (this.pollTimer) {
+			clearInterval(this.pollTimer)
+		}
+		
+		// Stop any running feedback timers
         for (const timer of Object.values(this.feedbackTimers)) {
             clearInterval(timer)
         }
     }
 
-    async prepareQuery(context, action, includeBody) {
-        let url = await context.parseVariablesInString(action.options.url || '')
-        if (url.substring(0, 4) !== 'http') {
-            if (this.config.prefix && this.config.prefix.length > 0) {
-                url = `${this.config.prefix}${url.trim()}`
-            }
-        }
-
-        let body = {}
-        if (includeBody && action.options.body && action.options.body.trim() !== '') {
-            body = await context.parseVariablesInString(action.options.body || '')
-
-            if (action.options.contenttype === 'application/json') {
-                //only parse the body if we are explicitly sending application/json
-                try {
-                    body = JSON.parse(body)
-                } catch (e) {
-                    this.log('error', `HTTP ${action.actionId.toUpperCase()} Request aborted: Malformed JSON Body (${e.message})`)
-                    this.updateStatus(InstanceStatus.UnknownError, e.message)
-                    return
-                }
-            }
-        }
-
-        let headers = {}
-        if (action.options.header.trim() !== '') {
-            const headersStr = await context.parseVariablesInString(action.options.header || '')
-
-            try {
-                headers = JSON.parse(headersStr)
-            } catch (e) {
-                this.log('error', `HTTP ${action.actionId.toUpperCase()} Request aborted: Malformed JSON Header (${e.message})`)
-                this.updateStatus(InstanceStatus.UnknownError, e.message)
-                return
-            }
-        }
-
-        if (includeBody && action.options.contenttype) {
-            headers['Content-Type'] = action.options.contenttype
-        }
-
-        const options = {
-            https: {
-                rejectUnauthorized: this.config.rejectUnauthorized,
-            },
-
-            headers,
-        }
-
-        if (includeBody) {
-            if (typeof body === 'string') {
-                body = body.replace(/\\n/g, '\n')
-                options.body = body
-            } else if (body) {
-                options.json = body
-            }
-        }
-
-        if (this.config.proxyAddress && this.config.proxyAddress.length > 0) {
-            options.agent = {
-                http: new HttpProxyAgent({
-                    proxy: this.config.proxyAddress,
-                }),
-                https: new HttpsProxyAgent({
-                    proxy: this.config.proxyAddress,
-                }),
-            }
-        }
-
-        return {
-            url,
-            options,
-        }
-    }
-
     /**
-     * Resolves the "stream" and "target" parameters, expanding the variables and trying to translate
-     * from stream name to stream id and from target name to target id.
+     * Resolves the "stream" and "platform" parameters, expanding the variables and trying to translate
+     * from stream name to stream id and from platform name to platform id.
      * 
      * @param {import('@companion-module/base').CompanionActionEvent} action
      * @param {import('@companion-module/base/dist/module-api/common.js').CompanionCommonCallbackContext} context
@@ -280,160 +260,6 @@ class CastrAPIInstance extends InstanceBase {
                 ],
                 callback: (action,context) => this.actionEnableStream(action,context),
             }
-        })
-    }
-
-    initActionsOld() {
-
-        const urlLabel = this.config.prefix ? 'URI' : 'URL'
-
-        this.setActionDefinitions({
-            post: {
-                name: 'POST',
-                options: [
-                    FIELDS.Url(urlLabel),
-                    FIELDS.Body,
-                    FIELDS.Header,
-                    FIELDS.ContentType,
-                    {
-                        type: 'custom-variable',
-                        label: 'JSON Response Data Variable',
-                        id: 'jsonResultDataVariable',
-                    },
-                    {
-                        type: 'checkbox',
-                        label: 'JSON Stringify Result',
-                        id: 'result_stringify',
-                        default: true,
-                    },
-                ],
-                callback: async (action, context) => {
-                    const { url, options } = await this.prepareQuery(context, action, true)
-
-                    try {
-                        const response = await got.post(url, options)
-
-                        // store json result data into retrieved dedicated custom variable
-                        const jsonResultDataVariable = action.options.jsonResultDataVariable
-                        if (jsonResultDataVariable) {
-                            this.log('debug', `Writing result to ${jsonResultDataVariable}`)
-
-                            let resultData = response.body
-
-                            if (!action.options.result_stringify) {
-                                try {
-                                    resultData = JSON.parse(resultData)
-                                } catch (error) {
-                                    //error stringifying
-                                }
-                            }
-
-                            this.setCustomVariableValue(jsonResultDataVariable, resultData)
-                        }
-
-                        this.updateStatus(InstanceStatus.Ok)
-                    } catch (e) {
-                        this.log('error', `HTTP POST Request failed (${e.message})`)
-                        this.updateStatus(InstanceStatus.UnknownError, e.code)
-                    }
-                },
-            },
-            get: {
-                name: 'GET',
-                options: [
-                    FIELDS.Url(urlLabel),
-                    FIELDS.Header,
-                    {
-                        type: 'custom-variable',
-                        label: 'JSON Response Data Variable',
-                        id: 'jsonResultDataVariable',
-                    },
-                    {
-                        type: 'checkbox',
-                        label: 'JSON Stringify Result',
-                        id: 'result_stringify',
-                        default: true,
-                    },
-                ],
-                callback: async (action, context) => {
-                    const { url, options } = await this.prepareQuery(context, action, false)
-
-                    try {
-                        const response = await got.get(url, options)
-
-                        // store json result data into retrieved dedicated custom variable
-                        const jsonResultDataVariable = action.options.jsonResultDataVariable
-                        if (jsonResultDataVariable) {
-                            this.log('debug', `Writing result to ${jsonResultDataVariable}`)
-
-                            let resultData = response.body
-
-                            if (!action.options.result_stringify) {
-                                try {
-                                    resultData = JSON.parse(resultData)
-                                } catch (error) {
-                                    //error stringifying
-                                }
-                            }
-
-                            this.setCustomVariableValue(jsonResultDataVariable, resultData)
-                        }
-
-                        this.updateStatus(InstanceStatus.Ok)
-                    } catch (e) {
-                        this.log('error', `HTTP GET Request failed (${e.message})`)
-                        this.updateStatus(InstanceStatus.UnknownError, e.code)
-                    }
-                },
-            },
-            put: {
-                name: 'PUT',
-                options: [FIELDS.Url(urlLabel), FIELDS.Body, FIELDS.Header, FIELDS.ContentType],
-                callback: async (action, context) => {
-                    const { url, options } = await this.prepareQuery(context, action, true)
-
-                    try {
-                        await got.put(url, options)
-
-                        this.updateStatus(InstanceStatus.Ok)
-                    } catch (e) {
-                        this.log('error', `HTTP PUT Request failed (${e.message})`)
-                        this.updateStatus(InstanceStatus.UnknownError, e.code)
-                    }
-                },
-            },
-            patch: {
-                name: 'PATCH',
-                options: [FIELDS.Url(urlLabel), FIELDS.Body, FIELDS.Header, FIELDS.ContentType],
-                callback: async (action, context) => {
-                    const { url, options } = await this.prepareQuery(context, action, true)
-
-                    try {
-                        await got.patch(url, options)
-
-                        this.updateStatus(InstanceStatus.Ok)
-                    } catch (e) {
-                        this.log('error', `HTTP PATCH Request failed (${e.message})`)
-                        this.updateStatus(InstanceStatus.UnknownError, e.code)
-                    }
-                },
-            },
-            delete: {
-                name: 'DELETE',
-                options: [FIELDS.Url(urlLabel), FIELDS.Body, FIELDS.Header],
-                callback: async (action, context) => {
-                    const { url, options } = await this.prepareQuery(context, action, true)
-
-                    try {
-                        await got.delete(url, options)
-
-                        this.updateStatus(InstanceStatus.Ok)
-                    } catch (e) {
-                        this.log('error', `HTTP DELETE Request failed (${e.message})`)
-                        this.updateStatus(InstanceStatus.UnknownError, e.code)
-                    }
-                },
-            },
         })
     }
 
