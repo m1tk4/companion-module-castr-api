@@ -20,6 +20,9 @@ class CastrAPIInstance extends InstanceBase {
     streams = new Map()
     streamsByName = new Map()
     variableDefinitionsCache = null
+    actionsCache = null
+    platforms = []
+    platformsDropdown = []
 
     configUpdated(config) {
         this.config = config
@@ -94,6 +97,8 @@ class CastrAPIInstance extends InstanceBase {
 
                 this.streams.clear()
                 this.streamsByName.clear()
+                this.platforms = []
+                this.platformsDropdown = []
                 let variableDefinitions = []
                 let variableValues = {}
 
@@ -121,6 +126,9 @@ class CastrAPIInstance extends InstanceBase {
                             for (const platform of stream.platforms) {
                                 addVar(`stream_${stream.name}_platform_${platform.name}_status`, `Stream '${stream.name}', platform '${platform.name}' status`, platform.broadcasting_status || 'undefined')
                                 addVar(`stream_${stream.name}_platform_${platform.name}_enabled`, `Stream '${stream.name}', platform '${platform.name}' enabled`, platform.enabled || false)
+                                let platformId = `${stream.name} :: ${platform.name}`
+                                this.platformsDropdown.push({ id: platformId, label: platformId })
+                                this.platforms[platformId] = { stream: stream._id, platform: platform._id }
                             }
                         }
                     }
@@ -265,16 +273,10 @@ class CastrAPIInstance extends InstanceBase {
             type: 'dropdown',
             label: 'Platform',
             allowCustom: true,
-            id: 'stream',
+            id: 'platform',
             useVariables: true,
-            choices:
-                Array.from(this.streams.keys())
-                    .map((k) => { return { id: this.streams.get(k).name, label: this.streams.get(k).name } })
-                    .concat(
-                        Array.from(this.streams.keys())
-                            .map((k) => { return { id: k, label: k } })
-                    ),
-            tooltip: 'use either the stream name or the stream id, variables are expanded',
+            choices: this.platformsDropdown,
+            tooltip: 'select or type in stream / platform, variables are expanded',
         }
 
 
@@ -285,7 +287,7 @@ class CastrAPIInstance extends InstanceBase {
             choices: Object.keys(OnOffToggle).map((k) => { return { id: OnOffToggle[k], label: OnOffToggle[k] } }),
         }
 
-        this.setActionDefinitions({
+        let newActions = {
             enableStream: {
                 name: 'Enable Stream',
                 label: 'Enable Stream',
@@ -299,13 +301,18 @@ class CastrAPIInstance extends InstanceBase {
                 name: 'Enable Platform',
                 label: 'Enable Platform',
                 options: [
-                    streamField,
                     platformField,
                     onOffToggleField
                 ],
                 callback: (action, context) => this.actionEnableStream(action, context),
-            },
-        })
+            }
+        }
+
+        if (JSON.stringify(newActions) !== JSON.stringify(this.actionsCache)) {
+            this.setActionDefinitions(newActions)
+            this.actionsCache = newActions
+            this.log('debug', 'action definitions updated')
+        }
     }
 
     feedbackTimers = {}
