@@ -122,6 +122,7 @@ class CastrAPIInstance extends InstanceBase {
                         addVar(`stream_${stream.name}_status`, `Stream '${stream.name}' Status`, stream.broadcasting_status || 'undefined')
                         addVar(`stream_${stream.name}_ingest_server`, `Stream '${stream.name}' ingest server`, stream.ingest.server || '')
                         addVar(`stream_${stream.name}_ingest_key`, `Stream '${stream.name}' ingest key`, stream.ingest.key || '')
+                        this.platformsDropdown.push({ id: `${stream.name} :: *ALL*`, label: `${stream.name} :: *ALL*` })
                         if (typeof stream.platforms === 'object' && Array.isArray(stream.platforms)) {
                             for (const platform of stream.platforms) {
                                 addVar(`stream_${stream.name}_platform_${platform.name}_status`, `Stream '${stream.name}', platform '${platform.name}' status`, platform.broadcasting_status || 'undefined')
@@ -131,6 +132,7 @@ class CastrAPIInstance extends InstanceBase {
                                 this.platforms[platformId] = { stream: stream._id, platform: platform._id }
                             }
                         }
+                        this.platformsDropdown.sort((a, b) => a.id.localeCompare(b.id)) // sort alphabetically by id
                     }
                     catch (err) {
                         this.log('error', `failed to parse stream data: ${err}`)
@@ -206,16 +208,40 @@ class CastrAPIInstance extends InstanceBase {
      * @param {import('@companion-module/base/dist/module-api/common.js').CompanionCommonCallbackContext} context
      */
     async resolveActionOptions(action, context) {
-        if (action.options.stream) {
+
+        // resolve stream field
+        if (typeof (action.options.stream) !== 'undefined') {
             action.options.stream = await context.parseVariablesInString(action.options.stream);
             if (this.streams.has(action.options.stream)) {
-            } else
-                if (this.streamsByName.has(action.options.stream)) {
-                    action.options.stream = this.streamsByName.get(action.options.stream)._id
+            }
+            else if (this.streamsByName.has(action.options.stream)) {
+                action.options.stream = this.streamsByName.get(action.options.stream)._id
+            }
+            else {
+                this.log('warn', `Stream name '${action.options.stream}' not found, passing as-is to API`)
+            }
+        }
+
+        // resolve platform field and build platforms list
+        if (typeof (action.options.platform !== 'undefined')) {
+            action.options.platform = await context.parseVariablesInString(action.options.platform)
+            let [streamName, platformName] = action.options.platform.split(' :: ')
+            console.log(`'${streamName}', '${platformName}'`)
+            if (this.streamsByName.has(streamName)) {
+                let stream = this.streamsByName.get(streamName)
+                action.options.stream = stream._id
+                action.options.platforms = []
+                if (typeof stream.platforms === 'object' && Array.isArray(stream.platforms)) {
+                    for (const platform of stream.platforms) {
+                        if (platform.name === platformName || platformName === '*ALL*') {
+                            action.options.platforms.push(platform._id)
+                        }
+                    }
                 }
-                else {
-                    this.log('warn', `Stream name '${action.options.stream}' not found, passing as-is to API`)
-                }
+            } else {
+                this.log('error', `resolveActionOptions() - stream '${streamName}' not found`)
+                return
+            }
         }
         this.log('debug', "resolveActionOptions() - resolved action: " + JSON.stringify(action, null, 2))
     }
@@ -249,6 +275,40 @@ class CastrAPIInstance extends InstanceBase {
             })
             .catch((err) => this.log('error', 'failed to enable stream'))
     }
+
+    /**
+    * Enables or disables a target platform
+    * 
+    * @param {import('@companion-module/base').CompanionActionEvent} action
+    * @param {import('@companion-module/base/dist/module-api/common.js').CompanionCommonCallbackContext} context
+    */
+    async actionEnablePlatform(action, context) {
+        this.log('debug', "actionEnablePlatform() - action: " + JSON.stringify(action, null, 2))
+        await this.resolveActionOptions(action, context)
+
+        return
+
+        let enabled = false;
+        switch (action.options.onoff) {
+            case OnOffToggle.ON: enabled = true; break;
+            case OnOffToggle.OFF: enabled = false; break;
+            case OnOffToggle.TOGGLE:
+                if (this.streams.has(action.options.stream)) {
+                    enabled = !this.streams.get(action.options.stream).enabled
+                }
+                else {
+                    this.log('error', `actionEnableStream(): Stream '${action.options.stream}' not found, cannot toggle`)
+                }
+                break;
+        }
+        this.callAPI('PATCH', 'live_streams', action.options.stream, { enabled: enabled })
+            .then((json) => {
+                this.log('debug', 'live_streams PATCH response: ' + JSON.stringify(json, null, 2))
+                //this.getStreams()
+            })
+            .catch((err) => this.log('error', 'failed to enable stream'))
+    }
+
 
     initActions() {
         this.log('debug', 'Initializing actions')
@@ -304,7 +364,7 @@ class CastrAPIInstance extends InstanceBase {
                     platformField,
                     onOffToggleField
                 ],
-                callback: (action, context) => this.actionEnableStream(action, context),
+                callback: (action, context) => this.actionEnablePlatform(action, context),
             }
         }
 
