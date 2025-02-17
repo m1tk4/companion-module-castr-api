@@ -19,6 +19,7 @@ class CastrAPIInstance extends InstanceBase {
     
     streams = new Map()
     streamsByName = new Map()
+	variableDefinitionsCache = null
 
     configUpdated(config) {
         this.config = config
@@ -105,22 +106,34 @@ class CastrAPIInstance extends InstanceBase {
                 for (const stream of json.docs) {
                     this.streams.set(stream._id, stream)
                     this.streamsByName.set(stream.name, stream)
-					addVar(`stream_${stream._id}_name`, `Stream ${stream._id} Name`, stream.name)
-					addVar(`stream_${stream._id}_enabled`, `Stream ${stream._id} Enabled`, stream.enabled || false )
-                    addVar(`stream_${stream._id}_status`, `Stream ${stream._id} Status`, stream.broadcasting_status || 'undefined')
-					addVar(`stream_${stream._id}_ingest_server`, `Stream ${stream._id} ingest server`, stream.ingest.server || '')
-					addVar(`stream_${stream._id}_ingest_key`, `Stream ${stream._id} ingest key`, stream.ingest.key || '')
-					addVar(`stream_${stream.name}_id`, `Stream ${stream.name} ID`, stream._id)
-					addVar(`stream_${stream.name}_enabled`, `Stream ${stream.name} Enabled`, stream.enabled || false )
-                    addVar(`stream_${stream.name}_status`, `Stream ${stream.name} Status`, stream.broadcasting_status || 'undefined')
-					addVar(`stream_${stream.name}_ingest_server`, `Stream ${stream.name} ingest server`, stream.ingest.server || '')
-					addVar(`stream_${stream.name}_ingest_key`, `Stream ${stream.name} ingest key`, stream.ingest.key || '')
+					addVar(`stream_${stream._id}_name`, `Stream '${stream._id}' Name`, stream.name)
+					addVar(`stream_${stream._id}_enabled`, `Stream '${stream._id}' Enabled`, stream.enabled || false )
+                    addVar(`stream_${stream._id}_status`, `Stream '${stream._id}' Status`, stream.broadcasting_status || 'undefined')
+					addVar(`stream_${stream._id}_ingest_server`, `Stream '${stream._id}' ingest server`, stream.ingest.server || '')
+					addVar(`stream_${stream._id}_ingest_key`, `Stream '${stream._id}' ingest key`, stream.ingest.key || '')
+					addVar(`stream_${stream.name}_id`, `Stream '${stream.name}' ID`, stream._id)
+					addVar(`stream_${stream.name}_enabled`, `Stream '${stream.name}' Enabled`, stream.enabled || false )
+                    addVar(`stream_${stream.name}_status`, `Stream '${stream.name}' Status`, stream.broadcasting_status || 'undefined')
+					addVar(`stream_${stream.name}_ingest_server`, `Stream '${stream.name}' ingest server`, stream.ingest.server || '')
+					addVar(`stream_${stream.name}_ingest_key`, `Stream '${stream.name}' ingest key`, stream.ingest.key || '')
+					if (typeof stream.platforms === 'object' && Array.isArray(stream.platforms)) {
+						for (const platform of stream.platforms) {
+							addVar(`stream_${stream.name}_platform_${platform.name}_status`, `Stream '${stream.name}', platform '${platform.name}' status`, platform.broadcasting_status || 'undefined')
+							addVar(`stream_${stream.name}_platform_${platform.name}_enabled`, `Stream '${stream.name}', platform '${platform.name}' enabled`, platform.enabled || false)
+						}
+					}
                 }
 
                 this.initActions()
-				console.log('variableDefinitions', variableDefinitions)
-				this.setVariableDefinitions(variableDefinitions)
+
+				// Update variable definitions (skip if cahced definitions are the same) and values
+				if (JSON.stringify(variableDefinitions) !== JSON.stringify(this.variableDefinitionsCache)) {
+					this.setVariableDefinitions(variableDefinitions)
+					this.variableDefinitionsCache = variableDefinitions
+					this.log('debug', 'variable definitions updated')
+				}
 				this.setVariableValues(variableValues)
+
                 this.updateStatus(InstanceStatus.Ok)
                 
             })
