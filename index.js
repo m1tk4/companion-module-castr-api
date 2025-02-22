@@ -1,4 +1,4 @@
-import { InstanceBase, runEntrypoint, InstanceStatus } from '@companion-module/base'
+import { InstanceBase, runEntrypoint, InstanceStatus, combineRgb } from '@companion-module/base'
 import _ from 'lodash'
 import got from 'got'
 import { HttpProxyAgent, HttpsProxyAgent } from 'hpagent'
@@ -24,6 +24,7 @@ class CastrAPIInstance extends InstanceBase {
     variableValuesCache = null
     statusCache = null
     actionsCache = null
+    feedbacksCache = null
     platforms = []
     platformsDropdown = []
 
@@ -160,6 +161,8 @@ class CastrAPIInstance extends InstanceBase {
                     this.variableValuesCache = variableValues
                     this.log('debug', 'variable values updated')
                     this.initActions()
+                    this.initFeedbacks()
+                    this.checkFeedbacks('streamEnabled')
                 }
 
                 this.updateStatusCached(InstanceStatus.Ok)
@@ -316,10 +319,8 @@ class CastrAPIInstance extends InstanceBase {
         }
     }
 
-    initActions() {
-        this.log('debug', 'Initializing actions')
-
-        let streamField = {
+    streamField() {
+        return {
             type: 'dropdown',
             label: 'Stream',
             allowCustom: true,
@@ -334,6 +335,10 @@ class CastrAPIInstance extends InstanceBase {
                     ),
             tooltip: 'use either the stream name or the stream id, variables are expanded',
         }
+    }
+
+    initActions() {
+        this.log('debug', 'Initializing actions')
 
         let platformField = {
             type: 'dropdown',
@@ -359,7 +364,7 @@ class CastrAPIInstance extends InstanceBase {
                 name: 'Enable Stream',
                 label: 'Enable Stream',
                 options: [
-                    streamField,
+                    this.streamField(),
                     onOffToggleField
                 ],
                 callback: (action, context) => this.actionEnableStream(action, context),
@@ -385,57 +390,54 @@ class CastrAPIInstance extends InstanceBase {
     feedbackTimers = {}
 
     initFeedbacks() {
-        const urlLabel = this.config.prefix ? 'URI' : 'URL'
 
-        this.setFeedbackDefinitions({
-            imageFromUrl: {
-                type: 'advanced',
-                name: 'Image from URL',
-                options: [FIELDS.Url(urlLabel), FIELDS.Header, FIELDS.PollInterval],
-                subscribe: (feedback) => {
-                    // Ensure existing timer is cleared
-                    if (this.feedbackTimers[feedback.id]) {
-                        clearInterval(this.feedbackTimers[feedback.id])
-                        delete this.feedbackTimers[feedback.id]
-                    }
+        const foregroundColor = {
+            type: 'colorpicker',
+            label: 'Foreground color',
+            id: 'fg',
+            default: combineRgb(0,0,0),
+        }
 
-                    // Start new timer if needed
-                    if (feedback.options.interval) {
-                        this.feedbackTimers[feedback.id] = setInterval(() => {
-                            this.checkFeedbacksById(feedback.id)
-                        }, feedback.options.interval)
-                    }
+        let feedbacks = {}
+
+        // TODO: try a boolean feedback - https://bitfocus.github.io/companion-module-base/interfaces/CompanionBooleanFeedbackDefinition.html
+        // https://github.com/bitfocus/companion-module-base/wiki/Feedbacks
+
+        feedbacks.streamEnabled = {
+            type: 'advanced',
+            name: 'Stream Enabled',
+            description: 'Indicate if the stream is enabled',
+            options: [
+                this.streamField(),
+                foregroundColor,
+                {
+                    type: 'colorpicker',
+                    label: 'Stream disabled',
+                    id: 'bgDisabled',
+                    default: combineRgb(88, 88, 88),
                 },
-                unsubscribe: (feedback) => {
-                    // Ensure timer is cleared
-                    if (this.feedbackTimers[feedback.id]) {
-                        clearInterval(this.feedbackTimers[feedback.id])
-                        delete this.feedbackTimers[feedback.id]
-                    }
-                },
-                callback: async (feedback, context) => {
-                    try {
-                        const { url, options } = await this.prepareQuery(context, feedback, false)
+                {
+                    type: 'colorpicker',
+                    label: 'Stream enabled',
+                    id: 'bgEnabled',
+                    default: combineRgb(0, 128, 0),
+                }
+            ],
+            callback: ({ options }) => { // TODO: this needs to be resolved but I am missing context that is present for action callbacks - see how at https://github.com/bitfocus/companion-module-base/wiki/Feedbacks
+                console.log(options)
+                return {
+                    color: options.fg,
+                    //bgcolor: this.streams.get(this.streamId).enabled ? options.bgEnabled : options.bgDisabled
+                    bgcolor: options.bgDisabled
+                }
+            }
+        }
 
-                        const res = await got.get(url, options)
-
-                        // Scale image to a sensible size
-                        const img = await Jimp.read(res.rawBody)
-                        const png64 = await img
-                            .scaleToFit(feedback.image?.width ?? 72, feedback.image?.height ?? 72)
-                            .getBase64Async('image/png')
-
-                        return {
-                            png64,
-                        }
-                    } catch (e) {
-                        // Image failed to load so log it and output nothing
-                        this.log('error', `Failed to fetch image: ${e}`)
-                        return {}
-                    }
-                },
-            },
-        })
+        if (!_.isEqual(feedbacks, this.feedbacksCache)) {
+            this.setFeedbackDefinitions(feedbacks)
+            this.feedbacksCache = feedbacks
+            this.log('debug', 'feedback definitions updated')
+        }
     }
 }
 
