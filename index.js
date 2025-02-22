@@ -2,7 +2,7 @@ import { InstanceBase, runEntrypoint, InstanceStatus, combineRgb } from '@compan
 import _ from 'lodash'
 import { configFields } from './config.js'
 import { upgradeScripts } from './upgrade.js'
-import Buffer from 'node:buffer'
+import { Buffer } from 'node:buffer'
 
 const COLOR = {
 	bgRed: combineRgb(204, 0, 0),
@@ -184,12 +184,12 @@ class CastrAPIInstance extends InstanceBase {
 					this.log('debug', 'variable values updated')
 					this.initActions()
 					this.initFeedbacks()
-					this.checkFeedbacks('streamEnabled', 'platformsEnabled')
+					this.checkFeedbacks('streamEnabled', 'platformsEnabled', 'streamStatus')
 				}
 
 				this.updateStatusCached(InstanceStatus.Ok)
 			})
-			.catch((err) => this.log('error', 'failed to read stream list: '+err))
+			.catch((err) => this.log('error', 'failed to read stream list: ' + err))
 	}
 
 	pollTimer = null
@@ -246,7 +246,7 @@ class CastrAPIInstance extends InstanceBase {
 		if (typeof action.options.stream !== 'undefined') {
 			action.options.stream = await context.parseVariablesInString(action.options.stream)
 			if (this.streams.has(action.options.stream)) {
-                // do nothing, already resolved
+				// do nothing, already resolved
 			} else if (this.streamsByName.has(action.options.stream)) {
 				action.options.stream = this.streamsByName.get(action.options.stream)._id
 			} else {
@@ -363,6 +363,18 @@ class CastrAPIInstance extends InstanceBase {
 					),
 				tooltip: 'use either the stream name or the stream id, variables are expanded',
 			},
+			status: {
+				type: 'dropdown',
+				label: 'Broadcasting Status',
+				allowCustom: true,
+				id: 'status',
+				useVariables: true,
+				choices: [
+					{ id: 'online', label: 'online' },
+					{ id: 'offline', label: 'offline' },
+				],
+				default: 'online',
+			},
 			platform: {
 				type: 'dropdown',
 				label: 'Platform',
@@ -412,7 +424,6 @@ class CastrAPIInstance extends InstanceBase {
 	}
 
 	initFeedbacks() {
-
 		let FIELDS = this.formFields()
 		let feedbacks = {}
 
@@ -430,6 +441,25 @@ class CastrAPIInstance extends InstanceBase {
 			callback: async (feedback, context) => {
 				if (this.streams.size > 0 && (await this.resolveOptions(feedback, context))) {
 					return this.streams.get(feedback.options.stream).enabled
+				} else {
+					return false
+				}
+			},
+		}
+
+		feedbacks.streamStatus = {
+			type: 'boolean',
+			name: 'Stream Status',
+			description: 'Indicate if the stream is online/offline',
+			showInvert: true,
+			options: [FIELDS.stream, FIELDS.status],
+			defaultStyle: {
+				bgcolor: COLOR.bgRed,
+				color: COLOR.white,
+			},
+			callback: async (feedback, context) => {
+				if (this.streams.size > 0 && (await this.resolveOptions(feedback, context))) {
+					return this.streams.get(feedback.options.stream).broadcasting_status == feedback.options.status
 				} else {
 					return false
 				}
