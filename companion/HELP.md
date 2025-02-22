@@ -16,8 +16,7 @@ To configure this module, you will need these two parts of the API Token:
 
 ### Supported API Functions
 
- - Enable/disable/toggle a Livestream
- - Enable/disable/toggle a streaming platform for a Livestream
- - platforms and livestream enablement and status are available as feedbacks
- - more in-depth API data is exposed as Companion variables.
- 
+- Enable/disable/toggle a Livestream
+- Enable/disable/toggle a streaming platform for a Livestream
+- platforms and livestream enablement and status are available as feedbacks
+- more in-depth API data is exposed as Companion variables.
