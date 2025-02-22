@@ -1,4 +1,5 @@
 import { InstanceBase, runEntrypoint, InstanceStatus } from '@companion-module/base'
+import _ from 'lodash'
 import got from 'got'
 import { HttpProxyAgent, HttpsProxyAgent } from 'hpagent'
 import { configFields } from './config.js'
@@ -20,6 +21,8 @@ class CastrAPIInstance extends InstanceBase {
     streams = new Map()
     streamsByName = new Map()
     variableDefinitionsCache = null
+    variableValuesCache = null
+    statusCache = null
     actionsCache = null
     platforms = []
     platformsDropdown = []
@@ -30,6 +33,13 @@ class CastrAPIInstance extends InstanceBase {
         this.initActions()
         this.initFeedbacks()
         this.log('debug', 'Config updated')
+    }
+
+    updateStatusCached(status, message) {
+        if (status !== this.statusCache) {
+            this.updateStatus(status, message)
+            this.statusCache = status
+        }
     }
 
     /**
@@ -65,11 +75,11 @@ class CastrAPIInstance extends InstanceBase {
                     if (!res.ok) {
                         switch (res.status) {
                             case 401:
-                                this.updateStatus(InstanceStatus.AuthenticationFailure, res.statusText)
+                                this.updateStatusCached(InstanceStatus.AuthenticationFailure, res.statusText)
                                 this.log('error', `API Authorization failed: ${res.status} ${res.statusText}`)
                                 break
                             default:
-                                this.updateStatus(InstanceStatus.UnknownError, res.statusText)
+                                this.updateStatusCached(InstanceStatus.UnknownError, res.statusText)
                                 this.log('error', `API Error: ${res.status} ${res.statusText}`)
                                 break
                         }
@@ -113,6 +123,7 @@ class CastrAPIInstance extends InstanceBase {
                         addVar(`stream_${stream._id}_name`, `Stream '${stream._id}' Name`, stream.name)
                         addVar(`stream_${stream._id}_enabled`, `Stream '${stream._id}' Enabled`, stream.enabled || false)
                         addVar(`stream_${stream._id}_status`, `Stream '${stream._id}' Status`, stream.broadcasting_status || 'undefined')
+                        // values: 'online', 'offline'
                         addVar(`stream_${stream._id}_ingest_server`, `Stream '${stream._id}' ingest server`, stream.ingest.server || '')
                         addVar(`stream_${stream._id}_ingest_key`, `Stream '${stream._id}' ingest key`, stream.ingest.key || '')
                         addVar(`stream_${stream.name}_id`, `Stream '${stream.name}' ID`, stream._id)
@@ -137,17 +148,21 @@ class CastrAPIInstance extends InstanceBase {
                     }
                 }
 
-                this.initActions()
-
                 // Update variable definitions (skip if cahced definitions are the same) and values
-                if (JSON.stringify(variableDefinitions) !== JSON.stringify(this.variableDefinitionsCache)) {
+                if (!_.isEqual(variableDefinitions,this.variableDefinitionsCache)) { 
                     this.setVariableDefinitions(variableDefinitions)
                     this.variableDefinitionsCache = variableDefinitions
                     this.log('debug', 'variable definitions updated')
+                    
                 }
-                this.setVariableValues(variableValues)
+                if(!_.isEqual(variableValues, this.variableValuesCache)) {
+                    this.setVariableValues(variableValues)
+                    this.variableValuesCache = variableValues
+                    this.log('debug', 'variable values updated')
+                    this.initActions()
+                }
 
-                this.updateStatus(InstanceStatus.Ok)
+                this.updateStatusCached(InstanceStatus.Ok)
 
             })
             .catch((err) => this.log('error', 'failed to read stream list'))
@@ -360,7 +375,7 @@ class CastrAPIInstance extends InstanceBase {
             }
         }
 
-        if (JSON.stringify(newActions) !== JSON.stringify(this.actionsCache)) {
+        if (!_.isEqual(newActions,this.actionsCache)) {
             this.setActionDefinitions(newActions)
             this.actionsCache = newActions
             this.log('debug', 'action definitions updated')
