@@ -1,14 +1,13 @@
 import { InstanceBase, runEntrypoint, InstanceStatus, combineRgb } from '@companion-module/base'
 import _ from 'lodash'
-import got from 'got'
-import { HttpProxyAgent, HttpsProxyAgent } from 'hpagent'
 import { configFields } from './config.js'
 import { upgradeScripts } from './upgrade.js'
-import { FIELDS } from './fields.js'
-import JimpRaw from 'jimp'
 
-// Webpack makes a mess..
-const Jimp = JimpRaw.default || JimpRaw
+const COLOR = {
+    bgRed: combineRgb(204, 0, 0),
+    white: combineRgb(255, 255, 255),
+    bgGreen: combineRgb(0, 204, 0),
+}
 
 const OnOffToggle = {
     ON: 'enable',
@@ -162,7 +161,7 @@ class CastrAPIInstance extends InstanceBase {
                     this.log('debug', 'variable values updated')
                     this.initActions()
                     this.initFeedbacks()
-                    this.checkFeedbacks('streamEnabled')
+                    this.checkFeedbacks('streamEnabled','platformsEnabled')
                 }
 
                 this.updateStatusCached(InstanceStatus.Ok)
@@ -224,7 +223,9 @@ class CastrAPIInstance extends InstanceBase {
      * @param {import('@companion-module/base').CompanionActionEvent} action
      * @param {import('@companion-module/base/dist/module-api/common.js').CompanionCommonCallbackContext} context
      */
-    async resolveActionOptions(action, context) {
+    async resolveOptions(action, context) {
+
+        let returnValue = true;
 
         // resolve stream field
         if (typeof (action.options.stream) !== 'undefined') {
@@ -235,7 +236,8 @@ class CastrAPIInstance extends InstanceBase {
                 action.options.stream = this.streamsByName.get(action.options.stream)._id
             }
             else {
-                this.log('warn', `Stream name '${action.options.stream}' not found, passing as-is to API`)
+                returnValue = false
+                this.log('warn', `Stream name '${action.options.stream}' not found, passing as-is`)
             }
         }
 
@@ -243,7 +245,6 @@ class CastrAPIInstance extends InstanceBase {
         if (typeof (action.options.platform) !== 'undefined') {
             action.options.platform = await context.parseVariablesInString(action.options.platform)
             let [streamName, platformName] = action.options.platform.split(' :: ')
-            console.log(`'${streamName}', '${platformName}'`)
             if (this.streamsByName.has(streamName)) {
                 let stream = this.streamsByName.get(streamName)
                 action.options.stream = stream._id
@@ -256,11 +257,12 @@ class CastrAPIInstance extends InstanceBase {
                     }
                 }
             } else {
-                this.log('error', `resolveActionOptions() - platform '${streamName}' not found`)
-                return
+                returnValue = false
+                this.log('error', `resolveOptions() - platform '${streamName}' not found`)
             }
         }
-        this.log('debug', "resolveActionOptions() - resolved action: " + JSON.stringify(action, null, 2))
+        this.log('debug', `resolveOptions(): ${returnValue}, resolved: ` + JSON.stringify(action, null, 2))
+        return returnValue
     }
 
     /**
@@ -271,7 +273,7 @@ class CastrAPIInstance extends InstanceBase {
      */
     async actionEnableStream(action, context) {
         this.log('debug', "actionEnableStream() - action: " + JSON.stringify(action, null, 2))
-        await this.resolveActionOptions(action, context)
+        await this.resolveOptions(action, context)
         let enabled = false;
         switch (action.options.onoff) {
             case OnOffToggle.ON: enabled = true; break;
@@ -301,7 +303,7 @@ class CastrAPIInstance extends InstanceBase {
     */
     async actionEnablePlatform(action, context) {
         this.log('debug', "actionEnablePlatform() - action: " + JSON.stringify(action, null, 2))
-        await this.resolveActionOptions(action, context)
+        await this.resolveOptions(action, context)
 
         for (const platform of action.options.platforms) {
             let enabled = false;
@@ -319,53 +321,54 @@ class CastrAPIInstance extends InstanceBase {
         }
     }
 
-    streamField() {
+    formFields() {
         return {
-            type: 'dropdown',
-            label: 'Stream',
-            allowCustom: true,
-            id: 'stream',
-            useVariables: true,
-            choices:
-                Array.from(this.streams.keys())
-                    .map((k) => { return { id: this.streams.get(k).name, label: this.streams.get(k).name } })
-                    .concat(
-                        Array.from(this.streams.keys())
-                            .map((k) => { return { id: k, label: k } })
-                    ),
-            tooltip: 'use either the stream name or the stream id, variables are expanded',
+            stream: {
+                type: 'dropdown',
+                label: 'Stream',
+                allowCustom: true,
+                id: 'stream',
+                useVariables: true,
+                choices:
+                    Array.from(this.streams.keys())
+                        .map((k) => { return { id: this.streams.get(k).name, label: this.streams.get(k).name } })
+                        .concat(
+                            Array.from(this.streams.keys())
+                                .map((k) => { return { id: k, label: k } })
+                        ),
+                tooltip: 'use either the stream name or the stream id, variables are expanded',
+            },
+            platform: {
+                type: 'dropdown',
+                label: 'Platform',
+                allowCustom: true,
+                id: 'platform',
+                useVariables: true,
+                choices: this.platformsDropdown,
+                tooltip: 'select or type in stream / platform, variables are expanded',
+            },
+            onOffToggle: {
+                type: 'dropdown',
+                label: 'Action',
+                id: 'onoff',
+                choices: Object.keys(OnOffToggle).map((k) => { return { id: OnOffToggle[k], label: OnOffToggle[k] } }),
+                tooltip: 'select if you want to enable, disable or toggle',
+            }
         }
     }
 
     initActions() {
         this.log('debug', 'Initializing actions')
 
-        let platformField = {
-            type: 'dropdown',
-            label: 'Platform',
-            allowCustom: true,
-            id: 'platform',
-            useVariables: true,
-            choices: this.platformsDropdown,
-            tooltip: 'select or type in stream / platform, variables are expanded',
-        }
-
-
-        let onOffToggleField = {
-            type: 'dropdown',
-            label: 'Action',
-            id: 'onoff',
-            choices: Object.keys(OnOffToggle).map((k) => { return { id: OnOffToggle[k], label: OnOffToggle[k] } }),
-            tooltip: 'select if you want to enable, disable or toggle',
-        }
-
+        let FIELDS = this.formFields()
+        
         let newActions = {
             enableStream: {
                 name: 'Enable Stream',
                 label: 'Enable Stream',
                 options: [
-                    this.streamField(),
-                    onOffToggleField
+                    FIELDS.stream,
+                    FIELDS.onOffToggle
                 ],
                 callback: (action, context) => this.actionEnableStream(action, context),
             },
@@ -373,8 +376,8 @@ class CastrAPIInstance extends InstanceBase {
                 name: 'Enable Platform',
                 label: 'Enable Platform',
                 options: [
-                    platformField,
-                    onOffToggleField
+                    FIELDS.platform,
+                    FIELDS.onOffToggle
                 ],
                 callback: (action, context) => this.actionEnablePlatform(action, context),
             }
@@ -389,6 +392,7 @@ class CastrAPIInstance extends InstanceBase {
 
     feedbackTimers = {}
 
+
     initFeedbacks() {
 
         const foregroundColor = {
@@ -397,38 +401,56 @@ class CastrAPIInstance extends InstanceBase {
             id: 'fg',
             default: combineRgb(0,0,0),
         }
-
+        
+        let FIELDS = this.formFields()
         let feedbacks = {}
 
-        // TODO: try a boolean feedback - https://bitfocus.github.io/companion-module-base/interfaces/CompanionBooleanFeedbackDefinition.html
-        // https://github.com/bitfocus/companion-module-base/wiki/Feedbacks
-
         feedbacks.streamEnabled = {
-            type: 'advanced',
+            type: 'boolean',
             name: 'Stream Enabled',
             description: 'Indicate if the stream is enabled',
+            showInvert: true,
+            
             options: [
-                this.streamField(),
-                foregroundColor,
-                {
-                    type: 'colorpicker',
-                    label: 'Stream disabled',
-                    id: 'bgDisabled',
-                    default: combineRgb(88, 88, 88),
-                },
-                {
-                    type: 'colorpicker',
-                    label: 'Stream enabled',
-                    id: 'bgEnabled',
-                    default: combineRgb(0, 128, 0),
-                }
+                FIELDS.stream,
             ],
-            callback: ({ options }) => { // TODO: this needs to be resolved but I am missing context that is present for action callbacks - see how at https://github.com/bitfocus/companion-module-base/wiki/Feedbacks
-                console.log(options)
-                return {
-                    color: options.fg,
-                    //bgcolor: this.streams.get(this.streamId).enabled ? options.bgEnabled : options.bgDisabled
-                    bgcolor: options.bgDisabled
+            defaultStyle: {
+                bgcolor: COLOR.bgRed,
+                color: COLOR.white,
+            },
+            callback: async (feedback, context) => {  
+                if (this.streams.size > 0 && await this.resolveOptions(feedback, context)) {
+                    return this.streams.get(feedback.options.stream).enabled
+                } else {
+                    return false
+                }
+            }
+        }
+
+        feedbacks.platformsEnabled = {
+            type: 'boolean',
+            name: 'Platform Enabled',
+            description: 'Indicate if a platform is enabled',
+            showInvert: true,
+            
+            options: [
+                FIELDS.platform,
+            ],
+            defaultStyle: {
+                bgcolor: COLOR.bgRed,
+                color: COLOR.white,
+            },
+            callback: async (feedback, context) => {
+                if (Object.keys(this.platforms).length && await this.resolveOptions(feedback, context)) {
+                    // note: Object.keys([]).length is the way to tell the array this.platforms is not empty.
+                    // the only way that works. JavaScript is fucked up.
+                    let allEnabled = true;
+                    for (const platform of feedback.options.platforms) {
+                        if (!platform.enabled) allEnabled = false
+                    }
+                    return allEnabled
+                } else {
+                    return false
                 }
             }
         }

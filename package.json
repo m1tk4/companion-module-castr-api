@@ -14,9 +14,6 @@
 	"license": "MIT",
 	"dependencies": {
 		"@companion-module/base": "~1.11.2",
-		"got": "^13.0.0",
-		"hpagent": "^1.2.0",
-		"jimp": "^0.22.12",
 		"lodash": "^4.17.21"
 	},
 	"devDependencies": {
