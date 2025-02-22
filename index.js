@@ -2,6 +2,7 @@ import { InstanceBase, runEntrypoint, InstanceStatus, combineRgb } from '@compan
 import _ from 'lodash'
 import { configFields } from './config.js'
 import { upgradeScripts } from './upgrade.js'
+import Buffer from 'node:buffer'
 
 const COLOR = {
 	bgRed: combineRgb(204, 0, 0),
@@ -188,7 +189,7 @@ class CastrAPIInstance extends InstanceBase {
 
 				this.updateStatusCached(InstanceStatus.Ok)
 			})
-			.catch((err) => this.log('error', 'failed to read stream list'))
+			.catch((err) => this.log('error', 'failed to read stream list: '+err))
 	}
 
 	pollTimer = null
@@ -245,6 +246,7 @@ class CastrAPIInstance extends InstanceBase {
 		if (typeof action.options.stream !== 'undefined') {
 			action.options.stream = await context.parseVariablesInString(action.options.stream)
 			if (this.streams.has(action.options.stream)) {
+                // do nothing, already resolved
 			} else if (this.streamsByName.has(action.options.stream)) {
 				action.options.stream = this.streamsByName.get(action.options.stream)._id
 			} else {
@@ -410,12 +412,6 @@ class CastrAPIInstance extends InstanceBase {
 	}
 
 	initFeedbacks() {
-		const foregroundColor = {
-			type: 'colorpicker',
-			label: 'Foreground color',
-			id: 'fg',
-			default: combineRgb(0, 0, 0),
-		}
 
 		let FIELDS = this.formFields()
 		let feedbacks = {}

@@ -18,6 +18,10 @@
 	},
 	"devDependencies": {
 		"@companion-module/tools": "^1.5.1",
+		"@eslint/js": "^9.21.0",
+		"eslint": "^9.21.0",
+		"eslint-config-prettier": "^10.0.1",
+		"globals": "^16.0.0",
 		"prettier": "^3.5.2"
 	},
 	"prettier": "@companion-module/tools/.prettierrc.json",
