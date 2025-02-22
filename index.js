@@ -148,13 +148,14 @@ class CastrAPIInstance extends InstanceBase {
                     }
                 }
 
-                // Update variable definitions (skip if cahced definitions are the same) and values
+                // Update variable definitions (skip if cahced definitions are the same)
                 if (!_.isEqual(variableDefinitions,this.variableDefinitionsCache)) { 
                     this.setVariableDefinitions(variableDefinitions)
                     this.variableDefinitionsCache = variableDefinitions
                     this.log('debug', 'variable definitions updated')
                     
                 }
+                // Update variable values (skip if cached values ara the same)
                 if(!_.isEqual(variableValues, this.variableValuesCache)) {
                     this.setVariableValues(variableValues)
                     this.variableValuesCache = variableValues
@@ -205,14 +206,8 @@ class CastrAPIInstance extends InstanceBase {
 
     // When module gets deleted
     async destroy() {
-
         if (this.pollTimer) {
             clearInterval(this.pollTimer)
-        }
-
-        // Stop any running feedback timers
-        for (const timer of Object.values(this.feedbackTimers)) {
-            clearInterval(timer)
         }
     }
 
@@ -389,9 +384,6 @@ class CastrAPIInstance extends InstanceBase {
             this.log('debug', 'action definitions updated')
         }
     }
-
-    feedbackTimers = {}
-
 
     initFeedbacks() {
 
